@@ -265,5 +265,5 @@ MIT License
 ## 仓库地址
 
 ```
-https://github.com/YOUR_USERNAME/SCO
+https://github.com/ydhc716-boo/osc
 ```
