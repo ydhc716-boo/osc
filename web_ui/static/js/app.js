@@ -83,7 +83,13 @@ const App = {
     },
 
     updateDeviceState(state) {
+        // Detect signal generator stop: clear buffer so residual waveform disappears
+        if (state.sg_on === false && this.deviceState.sg_on === true) {
+            this.scopeBuffer = [];
+        }
+
         Object.assign(this.deviceState, state);
+
         // If scope just started, clear buffer
         if (state.scope_on && !this.scopeActive) {
             this.scopeActive = true;
