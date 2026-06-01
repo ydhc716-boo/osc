@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCO — 简易信号源 & 示波器</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📡</text></svg>">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>
+                <span class="logo-icon">📡</span>
+                SCO — 简易信号源 &amp; 示波器
+            </h1>
+            <div class="connection-bar">
+                <span id="conn-status" class="conn-badge disconnected">● 未连接</span>
+                <button id="btn-connect" class="btn btn-sm btn-primary">连接设备</button>
+                <button id="btn-disconnect" class="btn btn-sm btn-danger" style="display:none">断开</button>
+            </div>
+        </header>
+
+        <!-- Connect Modal -->
+        <div id="connect-modal" class="modal" style="display:none">
+            <div class="modal-content">
+                <h3>连接设备</h3>
+                <div class="form-group">
+                    <label>连接模式</label>
+                    <select id="conn-mode">
+                        <option value="tcp">TCP (模拟器)</option>
+                        <option value="serial">串口 (硬件)</option>
+                    </select>
+                </div>
+                <div id="tcp-settings">
+                    <div class="form-group">
+                        <label>主机地址</label>
+                        <input type="text" id="tcp-host" value="127.0.0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>端口</label>
+                        <input type="number" id="tcp-port" value="9876">
+                    </div>
+                </div>
+                <div id="serial-settings" style="display:none">
+                    <div class="form-group">
+                        <label>串口</label>
+                        <select id="serial-port-list"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>波特率</label>
+                        <select id="serial-baud">
+                            <option value="115200">115200</option>
+                            <option value="921600">921600</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-connect-confirm" class="btn btn-primary">连接</button>
+                    <button id="btn-connect-cancel" class="btn btn-outline">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-layout">
+            <!-- Left Panel: Controls -->
+            <aside class="panel panel-left">
+                <!-- Signal Generator -->
+                <section class="card">
+                    <h2 class="card-title">🔊 信号源控制</h2>
+
+                    <div class="form-group">
+                        <label>波形类型</label>
+                        <div class="waveform-selector">
+                            <button class="wave-btn active" data-wave="0">正弦</button>
+                            <button class="wave-btn" data-wave="1">方波</button>
+                            <button class="wave-btn" data-wave="2">三角波</button>
+                            <button class="wave-btn" data-wave="3">锯齿波</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>频率 <span id="freq-display">1,000 Hz</span></label>
+                        <input type="range" id="sg-freq" min="1" max="100000" value="1000" step="1">
+                        <div class="range-labels">
+                            <span>1 Hz</span><span>10 kHz</span><span>100 kHz</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>幅度 <span id="amp-display">3,300 mV</span></label>
+                        <input type="range" id="sg-amp" min="0" max="3300" value="3300" step="10">
+                        <div class="range-labels">
+                            <span>0 mV</span><span>3,300 mV</span>
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button id="btn-sg-start" class="btn btn-success">▶ 启动信号源</button>
+                        <button id="btn-sg-stop" class="btn btn-danger" style="display:none">■ 停止信号源</button>
+                    </div>
+                </section>
+
+                <!-- Oscilloscope -->
+                <section class="card">
+                    <h2 class="card-title">📟 示波器控制</h2>
+
+                    <div class="form-group">
+                        <label>采样率 <span id="rate-display">100,000 SPS</span></label>
+                        <select id="scope-rate">
+                            <option value="1000">1 kSPS</option>
+                            <option value="10000">10 kSPS</option>
+                            <option value="50000">50 kSPS</option>
+                            <option value="100000" selected>100 kSPS</option>
+                            <option value="250000">250 kSPS</option>
+                            <option value="500000">500 kSPS</option>
+                            <option value="1000000">1 MSPS</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>触发模式</label>
+                        <select id="scope-trigger">
+                            <option value="0">自动</option>
+                            <option value="1">上升沿</option>
+                            <option value="2">下降沿</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>触发电平 <span id="trig-display">1,650 mV</span></label>
+                        <input type="range" id="scope-trig-level" min="0" max="3300" value="1650" step="10">
+                    </div>
+
+                    <div class="btn-row">
+                        <button id="btn-scope-start" class="btn btn-success">▶ 开始采集</button>
+                        <button id="btn-scope-stop" class="btn btn-danger" style="display:none">■ 停止采集</button>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Right Panel: Waveform Display -->
+            <main class="panel panel-right">
+                <section class="card card-full">
+                    <h2 class="card-title">📈 波形显示</h2>
+                    <div class="scope-container">
+                        <canvas id="scope-canvas"></canvas>
+                        <div id="scope-placeholder" class="scope-placeholder">
+                            <p>📟</p>
+                            <p>连接设备并开始采集以查看波形</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Measurements -->
+                <section class="card">
+                    <h2 class="card-title">📏 测量数据</h2>
+                    <div class="measurements" id="measurements">
+                        <div class="meas-item">
+                            <span class="meas-label">Vpp</span>
+                            <span class="meas-value" id="meas-vpp">--</span>
+                        </div>
+                        <div class="meas-item">
+                            <span class="meas-label">频率</span>
+                            <span class="meas-value" id="meas-freq">--</span>
+                        </div>
+                        <div class="meas-item">
+                            <span class="meas-label">平均值</span>
+                            <span class="meas-value" id="meas-avg">--</span>
+                        </div>
+                        <div class="meas-item">
+                            <span class="meas-label">最小值</span>
+                            <span class="meas-value" id="meas-min">--</span>
+                        </div>
+                        <div class="meas-item">
+                            <span class="meas-label">最大值</span>
+                            <span class="meas-value" id="meas-max">--</span>
+                        </div>
+                        <div class="meas-item">
+                            <span class="meas-label">丢包率</span>
+                            <span class="meas-value" id="meas-drop">0%</span>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span>SCO v1.0</span>
+            <span>STM32G474VET6 — Signal Generator &amp; Oscilloscope</span>
+            <span>USB CDC Communication</span>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/waveform.js"></script>
+    <script src="/static/js/controls.js"></script>
+</body>
+</html>
