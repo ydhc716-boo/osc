@@ -22,12 +22,9 @@ const Waveform = {
     waveformGlow: 'rgba(88, 166, 255, 0.3)',
     triggerColor: '#d2991d',
 
-    // View state
-    timePerDiv: 500,     // µs per horizontal division
-    voltsPerDiv: 500,    // mV per vertical division
+    // View state — defaults, overridden by DOM controls
     numHorizDivs: 10,
     numVertDivs: 8,
-
     vRef: 3300,          // mV reference
     vMid: 1650,          // mV midpoint
 
@@ -37,6 +34,17 @@ const Waveform = {
         this.dpr = window.devicePixelRatio || 1;
         this.resize();
         window.addEventListener('resize', () => this.resize());
+    },
+
+    /** Read current scale settings from DOM controls. */
+    getTimePerDiv() {
+        const el = document.getElementById('scope-time-div');
+        return el ? parseInt(el.value) : 500;
+    },
+
+    getVoltsPerDiv() {
+        const el = document.getElementById('scope-volt-div');
+        return el ? parseInt(el.value) : 500;
     },
 
     resize() {
@@ -86,7 +94,9 @@ const Waveform = {
         this.drawGrid(ctx, w, h);
 
         // Calculate view
-        const timeWindow = this.timePerDiv * this.numHorizDivs; // µs
+        const timePerDiv = this.getTimePerDiv();
+        const voltsPerDiv = this.getVoltsPerDiv();
+        const timeWindow = timePerDiv * this.numHorizDivs; // µs
         const samplesPerWindow = Math.floor((timeWindow / 1_000_000) * sampleRate);
         if (samplesPerWindow < 10) return;
 
@@ -153,8 +163,7 @@ const Waveform = {
         // Scale factors
         const xScale = w / numPoints;
         const yMid = h / 2;
-        const totalSpan = this.voltsPerDiv * this.numVertDivs; // mV total vertical
-
+        const totalSpan = this.getVoltsPerDiv() * this.numVertDivs; // mV
         // Draw waveform path
         ctx.beginPath();
         ctx.strokeStyle = this.waveformColor;
@@ -266,7 +275,7 @@ const Waveform = {
         // Time labels
         for (let i = 0; i <= numH; i++) {
             const x = i * dx;
-            const timeVal = (i - numH / 2) * this.timePerDiv;
+            const timeVal = (i - numH / 2) * this.getTimePerDiv();
             let label;
             if (Math.abs(timeVal) >= 1000) {
                 label = (timeVal / 1000).toFixed(1) + 'ms';
@@ -278,7 +287,7 @@ const Waveform = {
 
         // Voltage labels
         ctx.textAlign = 'right';
-        const totalSpan = this.voltsPerDiv * this.numVertDivs; // mV
+        const totalSpan = this.getVoltsPerDiv() * this.numVertDivs; // mV
         for (let i = 0; i <= numV; i++) {
             const y = i * dy;
             const mv = this.vMid + totalSpan / 2 - (i / numV) * totalSpan;

@@ -188,6 +188,21 @@ App.initControls = function () {
         $btnScopeStop.style.display = 'none';
     });
 
+    // ── Time/Div & Volt/Div (client-side only, no device command) ────
+    const $scopeTimeDiv = document.getElementById('scope-time-div');
+    $scopeTimeDiv.addEventListener('change', () => {
+        const val = parseInt($scopeTimeDiv.value);
+        const label = val >= 1000 ? (val / 1000) + ' ms/div' : val + ' µs/div';
+        document.getElementById('time-div-display').textContent = label;
+    });
+
+    const $scopeVoltDiv = document.getElementById('scope-volt-div');
+    $scopeVoltDiv.addEventListener('change', () => {
+        const val = parseInt($scopeVoltDiv.value);
+        const label = val >= 1000 ? (val / 1000).toFixed(1) + ' V/div' : val + ' mV/div';
+        document.getElementById('volt-div-display').textContent = label;
+    });
+
     // ── Keyboard shortcuts ─────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
