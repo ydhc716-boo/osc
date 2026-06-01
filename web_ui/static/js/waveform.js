@@ -287,14 +287,16 @@ function updateMeasurements(buffer, droppedPackets, totalPackets) {
     if (App.deviceState.sample_rate) {
         const fullSlice = buffer.slice(-Math.min(buffer.length, 20000));
         let fullCrossings = 0;
+        // Count every UPWARD zero-crossing (2 per full cycle)
         for (let i = 1; i < fullSlice.length; i++) {
-            if ((fullSlice[i - 1] < avg && fullSlice[i] >= avg) ||
-                (fullSlice[i] >= avg && fullSlice[i - 1] < avg)) {
+            if (fullSlice[i - 1] < avg && fullSlice[i] >= avg) {
                 fullCrossings++;
             }
         }
         const duration = fullSlice.length / App.deviceState.sample_rate;
-        const freq = fullCrossings / (2 * duration);
+        // Each full cycle = 2 crossings (up + down), so freq = crossings / 2 / duration
+        // But we only count UP crossings, so freq = crossings / duration
+        const freq = fullCrossings / duration;
         document.getElementById('meas-freq').textContent =
             freq >= 1000 ? (freq / 1000).toFixed(2) + ' kHz' : freq.toFixed(1) + ' Hz';
     }
