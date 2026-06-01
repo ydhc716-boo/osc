@@ -83,17 +83,27 @@
 
                     <div class="form-group">
                         <label>频率 <span id="freq-display">1,000 Hz</span></label>
-                        <input type="range" id="sg-freq" min="1" max="100000" value="1000" step="1">
+                        <div class="input-row">
+                            <input type="range" id="sg-freq" min="1" max="100000" value="1000" step="1">
+                            <input type="number" id="sg-freq-num" class="num-input" min="1" max="100000" value="1000" step="1">
+                        </div>
                         <div class="range-labels">
-                            <span>1 Hz</span><span>10 kHz</span><span>100 kHz</span>
+                            <span>1 Hz</span>
+                            <span class="hint">输入或拖拽</span>
+                            <span>100 kHz</span>
                         </div>
                     </div>
 
                     <div class="form-group">
                         <label>幅度 <span id="amp-display">3,300 mV</span></label>
-                        <input type="range" id="sg-amp" min="0" max="3300" value="3300" step="10">
+                        <div class="input-row">
+                            <input type="range" id="sg-amp" min="0" max="3300" value="3300" step="10">
+                            <input type="number" id="sg-amp-num" class="num-input" min="0" max="3300" value="3300" step="10">
+                        </div>
                         <div class="range-labels">
-                            <span>0 mV</span><span>3,300 mV</span>
+                            <span>0 mV</span>
+                            <span class="hint">输入或拖拽</span>
+                            <span>3,300 mV</span>
                         </div>
                     </div>
 

@@ -270,6 +270,40 @@ body {
     margin-top: 2px;
 }
 
+.range-labels .hint {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+.input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.input-row input[type="range"] {
+    flex: 3;
+}
+
+.num-input {
+    flex: 1;
+    min-width: 70px;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.num-input:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
+}
+
 /* ── Waveform Selector ──────────────────────────────────────────────────── */
 
 .waveform-selector {

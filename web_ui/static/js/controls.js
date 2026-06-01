@@ -73,25 +73,67 @@ App.initControls = function () {
     });
 
     const $sgFreq = document.getElementById('sg-freq');
-    $sgFreq.addEventListener('input', () => {
-        const freq = parseInt($sgFreq.value);
+    const $sgFreqNum = document.getElementById('sg-freq-num');
+
+    function updateFreqDisplay(freq) {
         document.getElementById('freq-display').textContent =
             freq >= 1000 ? (freq / 1000).toFixed(freq % 1000 === 0 ? 0 : 1) + ' kHz'
                          : freq + ' Hz';
-    });
+    }
+
+    function setFreq(freq, source) {
+        freq = Math.max(1, Math.min(100000, parseInt(freq) || 1000));
+        if (source !== 'slider') { $sgFreq.value = freq; }
+        if (source !== 'num')     { $sgFreqNum.value = freq; }
+        updateFreqDisplay(freq);
+    }
+
+    $sgFreq.addEventListener('input', () => setFreq(parseInt($sgFreq.value), 'slider'));
     $sgFreq.addEventListener('change', async () => {
         const freq = parseInt($sgFreq.value);
         await apiPost('/api/signal/set_frequency', { freq });
     });
 
-    const $sgAmp = document.getElementById('sg-amp');
-    $sgAmp.addEventListener('input', () => {
-        const amp = parseInt($sgAmp.value);
-        document.getElementById('amp-display').textContent = amp.toLocaleString() + ' mV';
+    $sgFreqNum.addEventListener('input', () => setFreq(parseInt($sgFreqNum.value), 'num'));
+    $sgFreqNum.addEventListener('change', async () => {
+        const freq = parseInt($sgFreqNum.value);
+        setFreq(freq, 'num');
+        await apiPost('/api/signal/set_frequency', { freq });
     });
+    $sgFreqNum.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { $sgFreqNum.blur(); }
+    });
+
+    // ── Amplitude ──────────────────────────────────────────────────────
+    const $sgAmp = document.getElementById('sg-amp');
+    const $sgAmpNum = document.getElementById('sg-amp-num');
+
+    function updateAmpDisplay(amp) {
+        document.getElementById('amp-display').textContent = amp.toLocaleString() + ' mV';
+    }
+
+    function setAmp(amp, source) {
+        amp = Math.max(0, Math.min(3300, parseInt(amp) || 0));
+        amp = Math.round(amp / 10) * 10; // snap to 10mV steps
+        if (source !== 'slider') { $sgAmp.value = amp; }
+        if (source !== 'num')    { $sgAmpNum.value = amp; }
+        updateAmpDisplay(amp);
+    }
+
+    $sgAmp.addEventListener('input', () => setAmp(parseInt($sgAmp.value), 'slider'));
     $sgAmp.addEventListener('change', async () => {
         const amp = parseInt($sgAmp.value);
         await apiPost('/api/signal/set_amplitude', { amp });
+    });
+
+    $sgAmpNum.addEventListener('input', () => setAmp(parseInt($sgAmpNum.value), 'num'));
+    $sgAmpNum.addEventListener('change', async () => {
+        const amp = parseInt($sgAmpNum.value);
+        setAmp(amp, 'num');
+        await apiPost('/api/signal/set_amplitude', { amp });
+    });
+    $sgAmpNum.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { $sgAmpNum.blur(); }
     });
 
     const $btnSgStart = document.getElementById('btn-sg-start');
@@ -202,6 +244,7 @@ function syncControlsFromState(state) {
 
     if (state.freq_hz !== undefined) {
         document.getElementById('sg-freq').value = state.freq_hz;
+        document.getElementById('sg-freq-num').value = state.freq_hz;
         document.getElementById('freq-display').textContent =
             state.freq_hz >= 1000
                 ? (state.freq_hz / 1000).toFixed(state.freq_hz % 1000 === 0 ? 0 : 1) + ' kHz'
@@ -210,6 +253,7 @@ function syncControlsFromState(state) {
 
     if (state.amp_mv !== undefined) {
         document.getElementById('sg-amp').value = state.amp_mv;
+        document.getElementById('sg-amp-num').value = state.amp_mv;
         document.getElementById('amp-display').textContent =
             state.amp_mv.toLocaleString() + ' mV';
     }
