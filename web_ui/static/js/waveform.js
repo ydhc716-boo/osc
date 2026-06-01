@@ -88,13 +88,63 @@ const Waveform = {
         // Calculate view
         const timeWindow = this.timePerDiv * this.numHorizDivs; // µs
         const samplesPerWindow = Math.floor((timeWindow / 1_000_000) * sampleRate);
+        if (samplesPerWindow < 10) return;
 
-        // Show the most recent data that fits the window
+        // ── Trigger alignment ───────────────────────────────────────────
+        const trigLevel = App.deviceState.trigger_level_mv || this.vMid;
+        const trigMode = App.deviceState.trigger_mode || 0;
+        // Trigger point position: 1 division from left (10% of width)
+        const trigPosFraction = 0.1;
+        const preTriggerSamples = Math.floor(samplesPerWindow * trigPosFraction);
+        const postTriggerSamples = samplesPerWindow - preTriggerSamples;
+
+        // Search backwards from end of buffer for a trigger event
+        const searchStart = Math.max(0, buffer.length - postTriggerSamples - 1);
+        let trigIdx = -1;
+
+        if (trigMode === 0) {
+            // Auto: use the most recent rising edge crossing
+            for (let i = searchStart; i > 1; i--) {
+                if (buffer[i - 1] < trigLevel && buffer[i] >= trigLevel) {
+                    trigIdx = i;
+                    break;
+                }
+            }
+        } else if (trigMode === 1) {
+            // Rising edge
+            for (let i = searchStart; i > 1; i--) {
+                if (buffer[i - 1] < trigLevel && buffer[i] >= trigLevel) {
+                    trigIdx = i;
+                    break;
+                }
+            }
+        } else if (trigMode === 2) {
+            // Falling edge
+            for (let i = searchStart; i > 1; i--) {
+                if (buffer[i - 1] > trigLevel && buffer[i] <= trigLevel) {
+                    trigIdx = i;
+                    break;
+                }
+            }
+        }
+
+        // If no trigger found, fall back to auto (just show recent data)
         let displaySamples;
-        if (buffer.length <= samplesPerWindow) {
-            displaySamples = buffer;
+        if (trigIdx < 0 || trigIdx - preTriggerSamples < 0) {
+            // Fallback: show most recent samples but still look for a trigger further back
+            if (buffer.length <= samplesPerWindow) {
+                displaySamples = buffer;
+            } else {
+                displaySamples = buffer.slice(buffer.length - samplesPerWindow);
+            }
         } else {
-            displaySamples = buffer.slice(buffer.length - samplesPerWindow);
+            const start = trigIdx - preTriggerSamples;
+            const end = start + samplesPerWindow;
+            displaySamples = buffer.slice(start, Math.min(end, buffer.length));
+            // Ensure correct length by padding at end if needed
+            while (displaySamples.length < samplesPerWindow) {
+                displaySamples.push(displaySamples[displaySamples.length - 1]);
+            }
         }
 
         const numPoints = displaySamples.length;
@@ -103,10 +153,6 @@ const Waveform = {
         // Scale factors
         const xScale = w / numPoints;
         const yMid = h / 2;
-        const yScale = h / (this.voltsPerDiv * this.numVertDivs); // pixels per mV
-
-        // Map voltage to y: y = yMid - (mv - vMid) * yScale
-        // vMid = 1650mV, voltsPerDiv * numVertDivs = total mV span
         const totalSpan = this.voltsPerDiv * this.numVertDivs; // mV total vertical
 
         // Draw waveform path
@@ -118,8 +164,8 @@ const Waveform = {
         const firstY = yMid - (displaySamples[0] - this.vMid) / totalSpan * h;
         ctx.moveTo(0, firstY);
 
-        // For performance with large buffers, decimate to screen width
-        const maxPoints = w * 2; // 2 points per pixel is enough
+        // For performance, decimate to screen width
+        const maxPoints = w * 2;
         let step = 1;
         if (numPoints > maxPoints) {
             step = Math.floor(numPoints / maxPoints);
@@ -142,9 +188,13 @@ const Waveform = {
         ctx.stroke();
         ctx.shadowBlur = 0;
 
-        // Draw trigger level indicator
-        const trigLevel = App.deviceState.trigger_level_mv || this.vMid;
+        // Draw trigger point marker (small triangle at trigger position)
+        const trigMarkerX = (trigIdx >= 0)
+            ? (preTriggerSamples / numPoints) * w
+            : 0.1 * w;
         const trigY = yMid - (trigLevel - this.vMid) / totalSpan * h;
+
+        // Trigger level line (dashed)
         ctx.beginPath();
         ctx.strokeStyle = this.triggerColor;
         ctx.lineWidth = 0.5;
@@ -154,7 +204,17 @@ const Waveform = {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Draw trigger label
+        // Trigger arrow marker
+        const arrowSize = 6;
+        ctx.fillStyle = this.triggerColor;
+        ctx.beginPath();
+        ctx.moveTo(trigMarkerX, trigY);
+        ctx.lineTo(trigMarkerX - arrowSize, trigY - arrowSize / 2);
+        ctx.lineTo(trigMarkerX - arrowSize, trigY + arrowSize / 2);
+        ctx.closePath();
+        ctx.fill();
+
+        // Trigger label
         ctx.fillStyle = this.triggerColor;
         ctx.font = '10px monospace';
         ctx.fillText(`T:${Math.round(trigLevel)}mV`, 4, trigY - 4);
