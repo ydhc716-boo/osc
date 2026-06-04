@@ -2,7 +2,7 @@
 
 基于 STM32G474VET6 的 USB 虚拟示波器与信号发生器系统。仅需一根 USB 数据线连接电脑，即可在浏览器中生成波形信号并查看实时波形。
 
-## 功能规格
+### 功能规格
 
 | 项目 | 参数 |
 |------|------|
@@ -13,62 +13,69 @@
 | 示波器触发 | 自动 / 上升沿 / 下降沿 |
 | 通信接口 | USB CDC 虚拟串口 |
 | 上位机界面 | Web 网页，浏览器访问 |
-| 模拟器 | Python TCP Server，无需硬件开发调试 |
+| 模拟器 | Python TCP Server，无需硬件即可开发调试 |
 
-## 项目结构
+---
+
+### 实现方案
+
+**硬件平台**
+
+MCU 为 STM32G474VET6（Cortex-M4, 170MHz）。外设资源：
+
+| 外设 | 引脚 | 用途 | 配置 |
+|------|------|------|------|
+| DAC1_CH1 | PA4 | 信号源输出 | 12bit, TIM6 触发 |
+| ADC1_CH1 | PA0 | 示波器输入 | 12bit, TIM2 触发, DMA 双缓冲 |
+| TIM6 | — | DDS 更新时钟 | 1 MHz 更新中断 |
+| TIM2 | — | ADC 采样时钟 | 可配置 1k–1M SPS |
+| USB OTG FS | PA11/PA12 | PC 通信 | CDC ACM 虚拟串口 |
+| GPIO | PA5 | 状态 LED | 心跳指示 |
+
+**DDS 信号发生器**
+
+32 位相位累加器 + 256 点正弦查找表，频率分辨率约 0.00023 Hz。TIM6 以 1 MHz 触发更新中断，在 ISR 中计算相位累加、查表、写入 DAC 寄存器。方波、三角波、锯齿波实时计算，幅度通过中点缩放实现。
+
+**示波器**
+
+ADC1 由 TIM2 触发采样，DMA 双缓冲模式（1024 点，前后各 512 点过半中断）。半满中断触发数据就绪标记，主循环检测后将数据通过 USB CDC 发送至 PC。支持自动/上升沿/下降沿触发，触发点对齐至缓冲区起始。
+
+**通信协议**
+
+自定义二进制协议，所有组件共用同一套协议（Python 模拟器 `simulator/protocol.py` ↔ C 固件 `firmware/Core/Src/protocol.c`）：
 
 ```
-SCO/
-├── README.md
-├── requirements.txt
-├── firmware/                    # 单片机固件 (C + HAL)
-│   ├── Core/Inc/                # main.h, dds.h, scope.h, protocol.h
-│   ├── Core/Src/                # main.c, dds.c, scope.c, protocol.c, ...
-│   ├── CUBEMX_SETUP.md          # CubeMX 配置指南
-│   ├── Makefile
-│   └── STM32G474VETx_FLASH.ld
-├── simulator/                   # MCU 模拟器 (Python TCP Server)
-│   ├── main.py                  # TCP 服务入口
-│   ├── dds_sim.py               # DDS 数学模拟
-│   ├── adc_sim.py               # ADC 虚拟采样
-│   └── protocol.py              # 协议编解码
-└── web_ui/                      # PC 上位机 (Flask + Canvas)
-    ├── server.py                # Flask 后端 + SocketIO
-    ├── serial_handler.py        # 串口/TCP 连接管理
-    ├── protocol.py
-    ├── templates/index.html
-    └── static/
-        ├── css/style.css
-        └── js/                  # app.js, websocket.js, waveform.js, controls.js
+[0xAA 0x55] [CMD 1B] [LEN_H 1B] [LEN_L 1B] [DATA N bytes] [CRC16 2B LE]
 ```
 
-## 环境要求
+CRC16-CCITT 校验，同步字容错恢复。PC→MCU 命令 0x01–0x0A（设置波形/频率/幅度/采样率/触发、启停信号源/示波器、查询状态），MCU→PC 响应 0x80（状态）、0x81（示波器数据）、0x82（错误）。
 
-| 组件 | 要求 |
-|------|------|
-| Python | 3.10+ |
-| 浏览器 | Chrome / Edge / Firefox |
-| 硬件 (可选) | STM32G474VET6 开发板 |
-| 编译工具 (可选) | arm-none-eabi-gcc + ST-Link |
+**上位机**
 
-## 快速开始
+Flask + Socket.IO 后端，Canvas 前端渲染波形。设备连接层抽象为 `DeviceHandler`，支持串口（真实硬件）和 TCP（模拟器）两种模式，运行时切换。
 
-**1. 安装依赖**
+---
+
+### 使用方法
+
+#### 方式一：模拟器运行（无需硬件）
+
+**1. 安装 Python 依赖**
 
 ```bash
 cd SCO
 pip install -r requirements.txt
 ```
 
-**2. 启动模拟器 (无需硬件)**
+**2. 启动模拟器**（开一个终端）
 
 ```bash
 python -m simulator.main --loopback
 ```
 
-模拟器监听 `127.0.0.1:9876`，环回模式将 DDS 输出接入 ADC 输入。
+模拟器监听 `127.0.0.1:9876`。`--loopback` 将信号源输出内部连接到示波器输入，无需外接跳线。
 
-**3. 启动 Web 上位机**
+**3. 启动 Web 上位机**（再开一个终端）
 
 ```bash
 python web_ui/server.py
@@ -78,81 +85,157 @@ Web 服务监听 `http://127.0.0.1:5000`。
 
 **4. 打开浏览器**
 
-访问 `http://127.0.0.1:5000`，点击 "连接设备" 选择 TCP 模式连接，配置信号源参数后启动信号源和采集即可查看实时波形。
+访问 `http://127.0.0.1:5000` → 点击 **连接设备** → 选择 **TCP** 模式 → 连接 → 设置波形参数 → 点击 **启动信号源** → 点击 **启动示波器** → 查看实时波形。
 
-**5. 使用真实硬件 (可选)**
+---
 
-参考 `firmware/CUBEMX_SETUP.md` 用 CubeMX 生成 HAL 驱动，`cd firmware && make && make flash` 烧录后 USB 连接开发板，Web 界面选择 "串口" 模式连接。
+#### 方式二：真实硬件运行
 
+**硬件连接**
 
-## 固件说明
+- ST-Link 连接开发板 SWD 接口（GND / SWCLK / SWDIO）
+- 开发板 USB OTG 口连接电脑（用于 CDC 虚拟串口通信）
+- **跳线连接 PA4（DAC输出）→ PA0（ADC输入）**—— 信号源自检环回
 
-**硬件资源**
+> 硬件接线示意：
+>
+> ![硬件连接图](placeholder)
+> *(请在此处粘贴硬件连接实物照片)*
 
-| 外设 | 引脚 | 用途 | 配置 |
-|------|------|------|------|
-| DAC1_CH1 | PA4 | 信号源输出 | 12bit, TIM6 DMA @ 1MHz |
-| ADC1_CH1 | PA0 | 示波器输入 | 12bit, TIM2 DMA 双缓冲 |
-| TIM6 | -- | DAC 触发 | 1MHz |
-| TIM2 | -- | ADC 触发 | 可配置 1k–1M SPS |
-| USB OTG FS | PA11/PA12 | PC 通信 | CDC ACM |
-| GPIO | PA5 | 状态 LED | 心跳指示 |
+**1. 编译固件**
 
-**DDS 信号发生器** — 32 位相位累加器 + 256 点正弦查找表。频率分辨率约 0.00023 Hz，DAC 更新率 1 MSPS。方波、三角波、锯齿波实时计算，幅度通过中点缩放。
+需要 arm-none-eabi-gcc 工具链和 GNU Make：
 
-**示波器** — DMA 双缓冲 (1024 点，A/B 半满交替)。半满中断触发数据打包与 USB 发送。触发模式支持自动、上升沿、下降沿，触发点对齐至缓冲区起始。
-
-
-
-## 运行截图
-
-> 运行 `python -m simulator.main --loopback` 和 `python web_ui/server.py` 后，浏览器访问 `http://127.0.0.1:5000`。
-
-1. **模拟器终端** — TCP 监听 127.0.0.1:9876，显示连接与命令日志
-2. **Web 主界面** — 左侧控制面板 + 右侧波形显示区 + 底部测量数据
-3. **连接对话框** — 切换 TCP/串口模式，输入地址和端口
-4. **信号源控制** — 波形选择按钮、频率/幅度滑块与数字输入
-5. **波形显示** — Canvas 实时渲染，网格标尺，触发电平线
-6. **测量面板** — Vpp、频率、平均值、最大值、最小值、丢包率
-7. **波形对比** — 正弦波、方波、三角波、锯齿波并排显示
-
-*(请在此处添加实际运行截图)*
-
-## 调试与开发
-
-直接测试协议（无需 Web UI）：
-
-```python
-import socket, struct, sys
-sys.path.insert(0, '.')
-from simulator.protocol import *
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(('127.0.0.1', 9876))
-sock.send(pack_set_freq(5000))
-sock.send(pack_start_sg())
-sock.send(pack_start_scope(512))
-
-parser = ProtocolParser()
-while True:
-    data = sock.recv(4096)
-    for cmd, d in parser.feed(data):
-        if cmd == RSP_SCOPE_DATA:
-            seq, count = struct.unpack('<HH', d[:4])
-            print(f"Got {count} samples, seq={seq}")
+```bash
+cd SCO\firmware
+make
 ```
 
-列出可用串口：
+**2. 烧录**
 
-```python
-from web_ui.serial_handler import list_serial_ports
-print(list_serial_ports())
+```bash
+make flash
 ```
 
+或使用 OpenOCD 手动烧录：
 
+```bash
+openocd -f interface/stlink.cfg -f target/stm32g4x.cfg -c "program build/sco_firmware.elf verify reset exit"
+```
 
+**3. 识别串口**
 
-## 仓库地址
+烧录后开发板通过 USB 连接电脑，设备管理器中出现 COM 端口（如 COM3）。
+
+**4. 启动 Web 上位机**
+
+```bash
+cd SCO
+python web_ui/server.py
+```
+
+**5. 使用**
+
+浏览器访问 `http://127.0.0.1:5000` → **连接设备** → 选择 **串口** 模式 → 选择对应 COM 口 → 连接 → 启动信号源 → 启动示波器 → 查看波形。
+
+---
+
+### 项目结构
+
+```
+SCO/
+├── README.md
+├── requirements.txt
+├── firmware/                    # 单片机固件 (C + STM32 HAL)
+│   ├── Core/Inc/                # main.h, dds.h, scope.h, protocol.h ...
+│   ├── Core/Src/                # main.c, dds.c, scope.c, protocol.c ...
+│   ├── Makefile
+│   └── STM32G474VETx_FLASH.ld
+├── simulator/                   # MCU 模拟器 (Python)
+│   ├── main.py                  # TCP 服务入口 + 命令处理
+│   ├── dds_sim.py               # DDS 数学模拟
+│   ├── adc_sim.py               # ADC 虚拟采样
+│   └── protocol.py              # 协议编解码（单一事实来源）
+└── web_ui/                      # PC 上位机 (Flask + Socket.IO + Canvas)
+    ├── server.py                # Flask 后端
+    ├── serial_handler.py        # 串口/TCP 连接抽象层
+    ├── templates/index.html
+    └── static/js/               # app.js, websocket.js, waveform.js, controls.js
+```
+
+---
+
+### 运行截图
+
+> 以下截图对应 **方式一（模拟器运行）**，启动模拟器和 Web 上位机后，浏览器访问 `http://127.0.0.1:5000`。
+
+**1. 模拟器终端**
+
+> 显示 TCP 监听 `127.0.0.1:9876`，连接日志与命令执行记录。
+
+![模拟器终端](placeholder)
+
+*(请在此处粘贴模拟器终端截图)*
+
+**2. Web 主界面**
+
+> 左侧控制面板 + 右侧波形显示区，连接状态和实时数据。
+
+![Web主界面](placeholder)
+
+*(请在此处粘贴 Web 主界面截图)*
+
+**3. 连接对话框**
+
+> 切换 TCP / 串口模式，输入地址和端口（或选择串口号）。
+
+![连接对话框](placeholder)
+
+*(请在此处粘贴连接对话框截图)*
+
+**4. 正弦波**
+
+> 信号源设置为正弦波，频率 1 kHz，幅度 3.3 Vpp。
+
+![正弦波](placeholder)
+
+*(请在此处粘贴正弦波截图)*
+
+**5. 方波**
+
+> 信号源设置为方波。
+
+![方波](placeholder)
+
+*(请在此处粘贴方波截图)*
+
+**6. 三角波**
+
+> 信号源设置为三角波。
+
+![三角波](placeholder)
+
+*(请在此处粘贴三角波截图)*
+
+**7. 锯齿波**
+
+> 信号源设置为锯齿波。
+
+![锯齿波](placeholder)
+
+*(请在此处粘贴锯齿波截图)*
+
+**8. 真实硬件运行**
+
+> 使用 STM32G474VET6 开发板，USB CDC 连接，PA4→PA0 环回。
+
+![硬件运行](placeholder)
+
+*(请在此处粘贴硬件运行截图，含开发板实物和 Web 波形)*
+
+---
+
+### 仓库地址
 
 ```
 https://github.com/ydhc716-boo/osc
