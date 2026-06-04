@@ -83,10 +83,12 @@ def crc16(data: bytes) -> int:
 # ── Packet helpers ────────────────────────────────────────────────────────────
 
 def pack_command(cmd: int, data: bytes = b'') -> bytes:
-    """Encode a PC→MCU command packet."""
+    """Encode a PC→MCU command packet.
+    LEN field uses big-endian (matching firmware: LEN_H then LEN_L).
+    """
     length = len(data)
-    # header: cmd(1B) + len(2B LE)
-    header = struct.pack('<BH', cmd, length)
+    # header: cmd(1B) + len(2B BE) — byte order MUST match firmware
+    header = bytes([cmd, (length >> 8) & 0xFF, length & 0xFF])
     payload = header + data
     crc = crc16(payload)
     return bytes([SYNC1, SYNC2]) + payload + struct.pack('<H', crc)
@@ -150,7 +152,7 @@ class ProtocolParser:
                 break
 
             cmd = self._buf[0]
-            data_len = self._buf[1] | (self._buf[2] << 8)  # uint16 LE
+            data_len = (self._buf[1] << 8) | self._buf[2]  # BE: LEN_H then LEN_L
             total = 3 + data_len + 2  # header(3) + data + crc(2)
 
             if len(self._buf) < total:

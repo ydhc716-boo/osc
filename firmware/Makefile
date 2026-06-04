@@ -3,13 +3,15 @@
 #
 # Prerequisites:
 #   - ARM GCC toolchain: https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain
-#   - STM32CubeG4 HAL/LL drivers (place in Drivers/)
-#   - STM32 USB Device Library (place in Middlewares/)
+#   - STM32CubeG4 firmware package (unzipped in STM32Cube Repository)
 #
 # Usage:
 #   make              — build firmware
 #   make flash        — flash via ST-Link (requires st-flash or openocd)
 #   make clean        — remove build artifacts
+
+# ── STM32Cube Firmware Package ──────────────────────────────────────────────
+REPO_BASE ?= $(USERPROFILE)\STM32Cube\Repository\STM32Cube_FW_G4_V1.6.3
 
 # ── Toolchain ─────────────────────────────────────────────────────────────
 CROSS   ?= arm-none-eabi-
@@ -20,23 +22,25 @@ SIZE    = $(CROSS)size
 GDB     = $(CROSS)gdb
 
 # ── MCU ────────────────────────────────────────────────────────────────────
-MCU      = STM32G474VETx
+MCU      = STM32G474xx
 CPU      = cortex-m4
 FPU      = fpv4-sp-d16
 FLOAT_ABI = hard
 
 # ── Directories ────────────────────────────────────────────────────────────
-BUILD_DIR = build
-CORE_SRC  = Core/Src
-CORE_INC  = Core/Inc
-DRV_SRC   = Drivers/STM32G4xx_HAL_Driver/Src
-DRV_INC   = Drivers/STM32G4xx_HAL_Driver/Inc
-CMSIS_INC = Drivers/CMSIS/Device/ST/STM32G4xx/Include
-CMSIS_CORE_INC = Drivers/CMSIS/Include
-USB_SRC   = Middlewares/ST/STM32_USB_Device_Library/Core/Src
-USB_INC   = Middlewares/ST/STM32_USB_Device_Library/Core/Inc
-USB_CDC_SRC = Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src
-USB_CDC_INC = Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc
+BUILD_DIR  = build
+CORE_SRC   = Core/Src
+CORE_INC   = Core/Inc
+
+# HAL / CMSIS / USB (from STM32CubeG4 firmware package)
+DRV_SRC    = $(REPO_BASE)\Drivers\STM32G4xx_HAL_Driver\Src
+DRV_INC    = $(REPO_BASE)\Drivers\STM32G4xx_HAL_Driver\Inc
+CMSIS_INC  = $(REPO_BASE)\Drivers\CMSIS\Device\ST\STM32G4xx\Include
+CMSIS_CORE_INC = $(REPO_BASE)\Drivers\CMSIS\Include
+USB_SRC    = $(REPO_BASE)\Middlewares\ST\STM32_USB_Device_Library\Core\Src
+USB_INC    = $(REPO_BASE)\Middlewares\ST\STM32_USB_Device_Library\Core\Inc
+USB_CDC_SRC = $(REPO_BASE)\Middlewares\ST\STM32_USB_Device_Library\Class\CDC\Src
+USB_CDC_INC = $(REPO_BASE)\Middlewares\ST\STM32_USB_Device_Library\Class\CDC\Inc
 
 # ── Sources ────────────────────────────────────────────────────────────────
 C_SOURCES = \
@@ -45,9 +49,12 @@ C_SOURCES = \
     $(CORE_SRC)/scope.c \
     $(CORE_SRC)/protocol.c \
     $(CORE_SRC)/usbd_cdc_if.c \
-    $(CORE_SRC)/stm32g4xx_it.c \
-    $(CORE_SRC)/stm32g4xx_hal_msp.c \
     $(CORE_SRC)/usb_device.c \
+    $(CORE_SRC)/usbd_desc.c \
+    $(CORE_SRC)/usbd_conf.c \
+    $(CORE_SRC)/stm32g4xx_hal_msp.c \
+    $(CORE_SRC)/stm32g4xx_it.c \
+    $(CORE_SRC)/system_stm32g4xx.c \
     $(DRV_SRC)/stm32g4xx_hal.c \
     $(DRV_SRC)/stm32g4xx_hal_rcc.c \
     $(DRV_SRC)/stm32g4xx_hal_gpio.c \
@@ -64,15 +71,17 @@ C_SOURCES = \
     $(DRV_SRC)/stm32g4xx_hal_pwr_ex.c \
     $(DRV_SRC)/stm32g4xx_hal_flash.c \
     $(DRV_SRC)/stm32g4xx_hal_flash_ex.c \
+    $(DRV_SRC)/stm32g4xx_hal_rcc_ex.c \
     $(DRV_SRC)/stm32g4xx_hal_pcd.c \
     $(DRV_SRC)/stm32g4xx_hal_pcd_ex.c \
+    $(DRV_SRC)/stm32g4xx_ll_usb.c \
     $(USB_SRC)/usbd_core.c \
     $(USB_SRC)/usbd_ctlreq.c \
     $(USB_SRC)/usbd_ioreq.c \
     $(USB_CDC_SRC)/usbd_cdc.c \
 
 ASM_SOURCES = \
-    startup_stm32g474xx.s
+    $(CORE_SRC)/startup_stm32g474xx.s
 
 # ── Includes ───────────────────────────────────────────────────────────────
 INCLUDES = \
@@ -98,6 +107,7 @@ LDFLAGS += --specs=nosys.specs --specs=nano.specs
 LDFLAGS += -T STM32G474VETx_FLASH.ld
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/firmware.map
+LDLIBS   = -lm
 
 # ── Targets ────────────────────────────────────────────────────────────────
 
@@ -108,19 +118,19 @@ vpath %.s $(sort $(dir $(ASM_SOURCES)))
 
 TARGET = $(BUILD_DIR)/sco_firmware
 
-.PHONY: all clean flash
+.PHONY: all clean flash flash-ocd
 
 all: $(BUILD_DIR) $(TARGET).elf $(TARGET).bin $(TARGET).hex
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "========================================"
 	@echo " BUILD SUCCESSFUL"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "========================================"
 	$(SIZE) $(TARGET).elf
 
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+	@if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
 
 $(TARGET).elf: $(OBJECTS)
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 	@echo "Linked: $@"
 
 $(BUILD_DIR)/%.o: %.c
@@ -150,5 +160,5 @@ flash-ocd: $(TARGET).elf
 	        -c "program $(TARGET).elf verify reset exit"
 
 clean:
-	rm -rf $(BUILD_DIR)
+	@if exist $(BUILD_DIR) rmdir /s /q $(BUILD_DIR)
 	@echo "Clean complete."

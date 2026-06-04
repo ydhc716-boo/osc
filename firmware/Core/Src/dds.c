@@ -24,8 +24,6 @@ static uint8_t  current_waveform;
 static uint16_t current_amplitude = 3300;
 static bool     running = false;
 
-/* DMA handle for DAC */
-extern DMA_HandleTypeDef hdma_dac1_ch1;
 
 /* ── Sine LUT Generation ───────────────────────────────────────────────── */
 
@@ -223,8 +221,8 @@ void DDS_Start(void)
     g_state.sg_phase_acc = 0;
     running = true;
 
-    /* Enable TIM6 */
-    __HAL_TIM_ENABLE(&htim6);
+    /* Start TIM6 with update interrupt (DDS core runs in ISR) */
+    HAL_TIM_Base_Start_IT(&htim6);
 
     /* Enable DAC */
     HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
@@ -233,7 +231,7 @@ void DDS_Start(void)
 void DDS_Stop(void)
 {
     running = false;
-    __HAL_TIM_DISABLE(&htim6);
+    HAL_TIM_Base_Stop_IT(&htim6);
     HAL_DAC_Stop(&hdac1, DAC_CHANNEL_1);
 
     /* Set output to 0V (mid-scale for AC-coupled, 0 for DC) */

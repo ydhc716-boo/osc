@@ -165,7 +165,8 @@ class MCUSimulator:
             int(adc_status['trigger_level_mv']),
             int(adc_status['sample_rate']),
         )
-        payload = bytes([RSP_STATUS]) + struct.pack('<H', len(data)) + data
+        n = len(data)
+        payload = bytes([RSP_STATUS, (n>>8)&0xFF, n&0xFF]) + data
         c = crc16(payload)
         return bytes([SYNC1, SYNC2]) + payload + struct.pack('<H', c)
 
@@ -175,12 +176,13 @@ class MCUSimulator:
         data = struct.pack('<HH', seq, count)
         for s in samples:
             data += struct.pack('<H', int(s))
-        payload = bytes([RSP_SCOPE_DATA]) + struct.pack('<H', len(data)) + data
+        n = len(data)
+        payload = bytes([RSP_SCOPE_DATA, (n>>8)&0xFF, n&0xFF]) + data
         c = crc16(payload)
         return bytes([SYNC1, SYNC2]) + payload + struct.pack('<H', c)
 
     def _error(self, code: int) -> bytes:
-        payload = bytes([RSP_ERROR]) + struct.pack('<H', 1) + bytes([code])
+        payload = bytes([RSP_ERROR, 0x00, 0x01]) + bytes([code])
         c = crc16(payload)
         return bytes([SYNC1, SYNC2]) + payload + struct.pack('<H', c)
 

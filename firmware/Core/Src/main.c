@@ -18,6 +18,8 @@
 #include "dds.h"
 #include "scope.h"
 #include "protocol.h"
+#include "usb_device.h"
+#include "usbd_cdc_if.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -32,7 +34,8 @@ SystemState g_state = {
     .scope_running      = 0,
     .scope_sample_rate  = 100000,
     .scope_trigger_mode = 0,
-    .scope_trigger_level= 2047,
+    .scope_trigger_level   = 2047,
+    .scope_trigger_level_mv= 1650,
     .scope_packet_size  = 512,
     .usb_connected      = 0,
     .data_ready         = 0,
@@ -47,9 +50,6 @@ TIM_HandleTypeDef    htim6;
 DMA_HandleTypeDef    hdma_dac1_ch1;
 DMA_HandleTypeDef    hdma_adc1;
 
-/* USBD handle (declared in usbd_cdc_if.c) */
-extern USBD_HandleTypeDef hUsbDeviceFS;
-
 /* ── USB CDC Receive Buffer ─────────────────────────────────────────────── */
 
 #define USB_RX_BUF_SIZE  1024
@@ -57,7 +57,7 @@ static uint8_t usb_rx_buf[USB_RX_BUF_SIZE];
 static volatile uint16_t usb_rx_len = 0;
 static ProtoParser proto_parser;
 
-/* USB TX buffer */
+/* USB TX buffer (must outlive async USB transfer) */
 #define USB_TX_BUF_SIZE  2048
 static uint8_t usb_tx_buf[USB_TX_BUF_SIZE];
 
@@ -92,12 +92,11 @@ static int USB_Send(const uint8_t *data, uint16_t len)
     }
     if (timeout == 0) return 0;
 
-    /* Ensure we don't exceed buffer */
+    /* Copy data to static buffer so it stays valid during USB transfer */
     if (len > USB_TX_BUF_SIZE) len = USB_TX_BUF_SIZE;
-
     memcpy(usb_tx_buf, data, len);
-    USBD_CDC_SetTxBuffer(&hUsbDeviceFS, usb_tx_buf, len);
 
+    USBD_CDC_SetTxBuffer(&hUsbDeviceFS, usb_tx_buf, len);
     if (USBD_CDC_TransmitPacket(&hUsbDeviceFS) != USBD_OK) {
         return 0;
     }
@@ -181,6 +180,7 @@ static void ProcessCommand(uint8_t cmd, const uint8_t *data, uint16_t len)
             uint16_t level = (uint16_t)data[1] | ((uint16_t)data[2] << 8);
             if (mode <= 2 && level <= 3300) {
                 g_state.scope_trigger_mode = mode;
+                g_state.scope_trigger_level_mv = level;
                 Scope_SetTrigger(mode, level);
             }
         }
@@ -329,6 +329,7 @@ void SystemClock_Config(void)
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
     RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
     RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+    UNUSED(PeriphClkInit);
 
     /** Configure the main internal regulator output voltage */
     HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
@@ -498,45 +499,9 @@ void MX_DMA_Init(void)
 
 void MX_USB_CDC_Init(void)
 {
-    /* USB CDC initialization is handled by the STM32 USB Device library.
-       In a real CubeMX project, this calls USBD_Init() and registers
-       the CDC interface class.
-
-       Key steps:
-       1. Enable USB OTG FS clock
-       2. Configure PA11 (DM) and PA12 (DP) in AF mode
-       3. Initialize USB device stack with CDC ACM class
-       4. Start USB device
-
-       This function is a placeholder — actual implementation depends
-       on CubeMX-generated USB middleware code.
-       ───────────────────────────────────────────────────────────────── */
-
-    /* Enable USB clock */
-    __HAL_RCC_USB_CLK_ENABLE();
-
-    /* GPIO PA11, PA12 for USB */
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = GPIO_PIN_11 | GPIO_PIN_12;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    /* USB Pins PA9 (VBUS) — optional */
-    GPIO_InitStruct.Pin = GPIO_PIN_9;
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    /* Enable USB FS IRQ */
-    HAL_NVIC_SetPriority(USB_LP_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(USB_LP_IRQn);
-
-    /* Note: Full USB CDC init requires CubeMX-generated usb_device.c
-       and usbd_cdc_if.c files. See the project documentation for
-       instructions on generating these with STM32CubeMX. */
+    /* Initialize USB Device CDC stack (defined in usb_device.c).
+       HAL_PCD_MspInit in usbd_conf.c handles GPIO and clock setup. */
+    MX_USB_DEVICE_Init();
 }
 
 /* ── IRQ Handlers ───────────────────────────────────────────────────────── */
@@ -553,20 +518,12 @@ void DMA1_Channel1_IRQHandler(void)
 
 void USB_LP_IRQHandler(void)
 {
-    /* Handled by USB device library */
-    extern USBD_HandleTypeDef hUsbDeviceFS;
-    HAL_PCD_IRQHandler((PCD_HandleTypeDef *)hUsbDeviceFS.pData);
+    /* Handled by USB device library via PCD handle (defined in usbd_conf.c) */
+    extern PCD_HandleTypeDef hpcd_USB_FS;
+    HAL_PCD_IRQHandler(&hpcd_USB_FS);
 }
 
-void NMI_Handler(void) {}
-void HardFault_Handler(void) { while(1); }
-void MemManage_Handler(void) { while(1); }
-void BusFault_Handler(void) { while(1); }
-void UsageFault_Handler(void) { while(1); }
-void SVC_Handler(void) {}
-void DebugMon_Handler(void) {}
-void PendSV_Handler(void) {}
-void SysTick_Handler(void) { HAL_IncTick(); }
+/* Cortex-M4 exception handlers are in stm32g4xx_it.c */
 
 void Error_Handler(void)
 {

@@ -66,6 +66,11 @@ void DDS_SetAmplitude(uint16_t amp_mv);
  */
 uint32_t DDS_GetPhase(void);
 
+/**
+ * @brief  TIM6 interrupt handler — call from TIM6_DAC_IRQHandler().
+ */
+void DDS_TIM6_IRQHandler(void);
+
 #ifdef __cplusplus
 }
 #endif

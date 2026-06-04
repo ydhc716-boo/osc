@@ -53,7 +53,8 @@ typedef struct {
     volatile uint8_t  scope_running;
     uint32_t          scope_sample_rate;
     uint8_t           scope_trigger_mode;
-    uint16_t          scope_trigger_level;  /* ADC code (0-4095) */
+    uint16_t          scope_trigger_level;     /* ADC code (0-4095) */
+    uint16_t          scope_trigger_level_mv;  /* trigger level in mV (0-3300) */
     uint16_t          scope_packet_size;
 
     /* Communication */
@@ -63,6 +64,14 @@ typedef struct {
 
 extern SystemState g_state;
 
+/* External peripheral handles (defined in main.c, used by dds.c / scope.c) */
+extern DAC_HandleTypeDef    hdac1;
+extern ADC_HandleTypeDef    hadc1;
+extern TIM_HandleTypeDef    htim2;
+extern TIM_HandleTypeDef    htim6;
+extern DMA_HandleTypeDef    hdma_dac1_ch1;
+extern DMA_HandleTypeDef    hdma_adc1;
+
 /* ── Exported Functions ────────────────────────────────────────────────── */
 
 void SystemClock_Config(void);
@@ -71,6 +80,7 @@ void MX_DAC_Init(void);
 void MX_ADC_Init(void);
 void MX_TIM6_Init(void);
 void MX_TIM2_Init(void);
+void MX_DMA_Init(void);
 void MX_USB_CDC_Init(void);
 void Error_Handler(void);
 

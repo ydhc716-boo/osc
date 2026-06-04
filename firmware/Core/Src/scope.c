@@ -86,13 +86,13 @@ void Scope_Start(void)
     HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_buf, SCOPE_BUF_SIZE);
 
     /* Start TIM2 to trigger ADC */
-    __HAL_TIM_ENABLE(&htim2);
+    HAL_TIM_Base_Start(&htim2);
 }
 
 void Scope_Stop(void)
 {
     running = false;
-    __HAL_TIM_DISABLE(&htim2);
+    HAL_TIM_Base_Stop(&htim2);
     HAL_ADC_Stop_DMA(&hadc1);
 }
 
@@ -124,7 +124,7 @@ void Scope_SetSampleRate(uint32_t rate_hz)
     if (arr > 0xFFFF) arr = 0xFFFF;
     __HAL_TIM_SET_AUTORELOAD(&htim2, (uint32_t)arr);
     __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, (uint32_t)arr / 2);
-    __HAL_TIM_GENERATE_EVENT(&htim2, TIM_EVENTSOURCE_UPDATE);
+    HAL_TIM_GenerateEvent(&htim2, TIM_EVENTSOURCE_UPDATE);
 }
 
 void Scope_SetTrigger(uint8_t mode, uint16_t level_mv)
